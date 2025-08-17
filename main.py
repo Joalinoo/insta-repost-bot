@@ -3,6 +3,7 @@ import time
 from instagrapi import Client
 import google.generativeai as genai
 import re
+import json
 
 # Login
 USERNAME = os.getenv("IG_USERNAME")
@@ -13,8 +14,39 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
+# Adiciona o arquivo da sessão
+SESSION_FILE = "session.json"
+
 cl = Client()
-cl.login(USERNAME, PASSWORD)
+
+# Lógica de login e salvamento de sessão
+if os.path.exists(SESSION_FILE):
+    # Tenta carregar a sessão salva
+    try:
+        cl.load_settings(SESSION_FILE)
+        cl.login(USERNAME, PASSWORD)
+        print("🚀 Sessão carregada com sucesso!")
+    except Exception as e:
+        print(f"❌ Erro ao carregar a sessão, tentando login manual... {e}")
+        login_and_save_session()
+else:
+    login_and_save_session()
+
+def login_and_save_session():
+    # Tenta o login com a senha
+    try:
+        cl.login(USERNAME, PASSWORD)
+    except Exception as e:
+        # Se falhar, pede o código de verificação
+        if "challenge_required" in str(e):
+            verification_code = input("O Instagram pediu um código de verificação. Digite o código que foi enviado para o seu e-mail/SMS: ")
+            cl.challenge_code(USERNAME, verification_code)
+            print("Código aceito. Sessão salva!")
+        else:
+            raise e
+    # Salva a sessão em um arquivo
+    cl.dump_settings(SESSION_FILE)
+    print("Sessão salva em session.json. Agora a vida vai ser fácil.")
 
 # Lista de contas de onde vamos puxar os conteúdos
 ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
