@@ -8,7 +8,6 @@ import re
 import json
 import csv
 from datetime import datetime
-from flask import Flask
 
 # --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
@@ -24,7 +23,7 @@ SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
 # --- Dados de Operação ---
-ORIGINS = ["alfinetei", "saiufofoca", "babados", "choquei"]
+ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
 
 # Proxies (Adicione seus próprios proxies aqui)
 # Use o formato "http://usuario:senha@ip:porta"
@@ -185,11 +184,15 @@ def start_bot_loop():
             sleep_time = random.randint(1200, 2400) # 20 a 40 minutos
             print(f"⏰ Horário comercial, próximo post em {sleep_time/60:.2f} minutos.")
 
-        time.sleep(sleep_time)
-
         random.shuffle(ORIGINS) # Randomiza a ordem pra parecer humano
         for origin in ORIGINS:
             repost_from_origin(origin)
+
+        # Adiciona o contador regressivo antes do sleep
+        for remaining_time in range(sleep_time, 0, -1):
+            if remaining_time % 60 == 0:
+                print(f"Próxima postagem em {remaining_time // 60} minutos...")
+            time.sleep(1)
 
 # --- Servidor de fachada para o Render ---
 app = Flask(__name__)
