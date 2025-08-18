@@ -8,7 +8,7 @@ import re
 import json
 import csv
 from datetime import datetime
-from flask import Flask
+from flask import Flask # Adicionado a importação do Flask
 
 # --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
@@ -136,17 +136,8 @@ def repost_from_origin(username):
         user_id = cl.user_id_from_username(username)
         medias = cl.user_medias(user_id, 10) # Pega os 10 posts mais recentes
 
-        # --- Filtro para Mídias Válidas ---
-        valid_medias = []
-        for m in medias:
-            try:
-                if str(m.pk) not in processed_media_ids and m.caption_text and hasattr(m, 'clip_metadata'):
-                    valid_medias.append(m)
-            except Exception as e:
-                print(f"⚠️ Mídia inválida ignorada: {e}")
-        
-        medias = valid_medias
-        
+        # Remove mídias já repostadas e sem descrição (evita lixo)
+        medias = [m for m in medias if str(m.pk) not in processed_media_ids and m.caption_text]
         if not medias:
             print(f"Nenhum post novo de @{username} para repostar.")
             return
