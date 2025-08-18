@@ -24,14 +24,10 @@ SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
 # --- Dados de Operação ---
-ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
+ORIGINS = ["saiufofoca", "babados"]
 
 # Proxies (Adicione seus próprios proxies aqui)
-PROXIES = [
-    "http://user:pass@ip1:port",
-    "http://user:pass@ip2:port",
-    "http://user:pass@ip3:port"
-]
+PROXIES = []
 
 # Mapeamento de emoções para palavras-chave
 EMOTION_MAP = {
