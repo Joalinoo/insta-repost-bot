@@ -7,6 +7,8 @@ import re
 import json
 import csv
 from datetime import datetime
+from flask import Flask
+import threading
 
 # --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
@@ -171,19 +173,36 @@ def repost_from_origin(username):
         print(f"❌ Erro ao repostar de @{username}: {e}")
 
 # --- Loop Principal de Operação (com horários humanos) ---
-while True:
-    hora = datetime.now().hour
-    if 2 <= hora <= 6:
-        # Frequência menor de madrugada
-        sleep_time = random.randint(3600, 5400) # 1h a 1h30
-        print(f"😴 Madrugada, dormindo por {sleep_time/60:.2f} minutos.")
-    else:
-        # Frequência normal
-        sleep_time = random.randint(1200, 2400) # 20 a 40 minutos
-        print(f"⏰ Horário comercial, próximo post em {sleep_time/60:.2f} minutos.")
+def start_bot_loop():
+    while True:
+        hora = datetime.now().hour
+        if 2 <= hora <= 6:
+            # Frequência menor de madrugada
+            sleep_time = random.randint(3600, 5400) # 1h a 1h30
+            print(f"😴 Madrugada, dormindo por {sleep_time/60:.2f} minutos.")
+        else:
+            # Frequência normal
+            sleep_time = random.randint(1200, 2400) # 20 a 40 minutos
+            print(f"⏰ Horário comercial, próximo post em {sleep_time/60:.2f} minutos.")
 
-    time.sleep(sleep_time)
+        time.sleep(sleep_time)
 
-    random.shuffle(ORIGINS) # Randomiza a ordem pra parecer humano
-    for origin in ORIGINS:
-        repost_from_origin(origin)
+        random.shuffle(ORIGINS) # Randomiza a ordem pra parecer humano
+        for origin in ORIGINS:
+            repost_from_origin(origin)
+
+# --- Servidor de fachada para o Render ---
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot está rodando 🚀"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+# Inicia o servidor Flask em paralelo com o bot
+threading.Thread(target=run_flask).start()
+
+# Inicia o loop do bot em paralelo
+threading.Thread(target=start_bot_loop).start()
