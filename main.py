@@ -24,10 +24,15 @@ SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
 # --- Dados de Operação ---
-ORIGINS = ["alfinetei", "saiufofoca", "babados"]
+ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
 
-# Proxies (Lista vazia para evitar o erro)
-PROXIES = []
+# Proxies (Adicione seus próprios proxies aqui)
+# Use o formato "http://usuario:senha@ip:porta"
+PROXIES = [
+    "http://user:pass@ip1:port",
+    "http://user:pass@ip2:port",
+    "http://user:pass@ip3:port"
+]
 
 # Mapeamento de emoções para palavras-chave
 EMOTION_MAP = {
@@ -131,8 +136,17 @@ def repost_from_origin(username):
         user_id = cl.user_id_from_username(username)
         medias = cl.user_medias(user_id, 10) # Pega os 10 posts mais recentes
 
-        # Remove mídias já repostadas e sem descrição (evita lixo)
-        medias = [m for m in medias if str(m.pk) not in processed_media_ids and m.caption_text]
+        # --- Filtro para Mídias Válidas ---
+        valid_medias = []
+        for m in medias:
+            try:
+                if str(m.pk) not in processed_media_ids and m.caption_text and hasattr(m, 'clip_metadata'):
+                    valid_medias.append(m)
+            except Exception as e:
+                print(f"⚠️ Mídia inválida ignorada: {e}")
+        
+        medias = valid_medias
+        
         if not medias:
             print(f"Nenhum post novo de @{username} para repostar.")
             return
