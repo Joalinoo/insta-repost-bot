@@ -1,62 +1,75 @@
 import os
 import time
+import random
 from instagrapi import Client
 import google.generativeai as genai
 import re
 import json
 import csv
+from datetime import datetime
 
-# Login
+# --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
 PASSWORD = os.getenv("IG_PASSWORD")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-# Adiciona a variável para o código de verificação
 IG_VERIFICATION_CODE = os.getenv("IG_VERIFICATION_CODE")
 
-# Configuração da API do Google Gemini
+# --- Configurações da Máquina ---
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Adiciona o arquivo da sessão e do log de posts
 SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
+# --- Dados de Operação ---
+ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
+
+# Proxies (Adicione seus próprios proxies aqui)
+# Use o formato "http://usuario:senha@ip:porta"
+PROXIES = [
+    "http://user:pass@ip1:port",
+    "http://user:pass@ip2:port",
+    "http://user:pass@ip3:port"
+]
+
+# Mapeamento de emoções para palavras-chave
+EMOTION_MAP = {
+    "choque": ["absurdo", "chocante", "inacreditável", "revoltante"],
+    "curiosidade": ["descobriu", "segredo", "por que", "entenda"],
+    "raiva": ["revolta", "absurdo", "inacreditável", "sem noção"],
+    "ganancia": ["dinheiro", "milhões", "oportunidade", "rico"],
+}
+
+# --- Lógica de Login e Sessão ---
 cl = Client()
 
 def login_and_save_session():
-    # Tenta o login com a senha
     try:
         print("Tentando login manual...")
         cl.login(USERNAME, PASSWORD)
     except Exception as e:
-        # Se falhar, tenta o código de verificação do Render
         if "challenge_required" in str(e):
             if IG_VERIFICATION_CODE:
                 try:
                     cl.challenge_code(USERNAME, IG_VERIFICATION_CODE)
                     print("Código de verificação aceito. Sessão salva!")
                 except Exception as challenge_e:
-                    # Se o código do Render for inválido, avisa o erro
                     print("--------------------------------------------------")
                     print("❌ ERRO: O CÓDIGO DE VERIFICAÇÃO É INVÁLIDO OU EXPIROU.")
-                    print("⚠️ O script precisa de um novo código de verificação válido. Verifique seu e-mail/SMS e insira o novo código na variável IG_VERIFICATION_CODE do Render.")
+                    print("⚠️ Insira um novo código na variável IG_VERIFICATION_CODE do Render.")
                     print("--------------------------------------------------")
                     raise challenge_e
             else:
-                # Se não tiver código no Render, avisa
                 print("--------------------------------------------------")
                 print("❌ ERRO: O SCRIPT PRECISA DE UM CÓDIGO DE VERIFICAÇÃO.")
-                print("⚠️ Insira o código que foi enviado para o seu e-mail/SMS na variável IG_VERIFICATION_CODE do Render.")
+                print("⚠️ Insira o código na variável IG_VERIFICATION_CODE do Render.")
                 print("--------------------------------------------------")
                 raise e
         else:
             raise e
-    # Salva a sessão em um arquivo
     cl.dump_settings(SESSION_FILE)
     print("Sessão salva em session.json. Agora a vida vai ser fácil.")
 
-# Lógica de login e salvamento de sessão
 if os.path.exists(SESSION_FILE):
     try:
         cl.load_settings(SESSION_FILE)
@@ -68,7 +81,7 @@ if os.path.exists(SESSION_FILE):
 else:
     login_and_save_session()
 
-# Lógica do log de posts
+# --- Lógica de Log de Posts ---
 def get_reposted_media_ids():
     if not os.path.exists(REPOST_LOG_FILE):
         return set()
@@ -83,17 +96,7 @@ def add_reposted_media_id(media_id):
 
 processed_media_ids = get_reposted_media_ids()
 
-# Lista de contas de onde vamos puxar os conteúdos
-ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
-
-# Mapeamento de emoções para palavras-chave
-EMOTION_MAP = {
-    "choque": ["absurdo", "chocante", "inacreditável", "revoltante"],
-    "curiosidade": ["descobriu", "segredo", "por que", "entenda"],
-    "raiva": ["revolta", "absurdo", "inacreditável", "sem noção"],
-    "ganancia": ["dinheiro", "milhões", "oportunidade", "rico"],
-}
-
+# --- Funções do Robô ---
 def generate_aggressive_caption(original_caption, username):
     detected_emotion = "curiosidade"
     for emotion, keywords in EMOTION_MAP.items():
@@ -104,55 +107,83 @@ def generate_aggressive_caption(original_caption, username):
         if detected_emotion != "curiosidade":
             break
 
-    prompt = f"Gere uma legenda para um post de mídia social no estilo 'clickbait' e extremamente agressivo, com base na seguinte descrição: '{original_caption}'. O objetivo é manipular o usuário a interagir, usando os gatilhos de {detected_emotion}. A legenda deve ser curta, sem menção à fonte original (@{username}), e deve incluir um CTA (Chamada para Ação) no final, tipo 'Comenta o que tu acha', 'Não vai acreditar nisso', etc."
+    prompt = (
+        f"Gere uma legenda para um post de mídia social no estilo 'clickbait' e extremamente agressivo, "
+        f"com base na seguinte descrição: '{original_caption}'. O objetivo é manipular o usuário a interagir, "
+        f"usando os gatilhos de {detected_emotion}. A legenda deve ser curta, sem menção à fonte original (@{username}), "
+        f"e deve incluir um CTA (Chamada para Ação) no final, tipo 'Comenta o que tu acha', "
+        f"'Não vai acreditar nisso', etc. Adicione 4 a 6 hashtags populares relacionadas ao tema. "
+        f"Exemplo de resposta: 'DESCUBRA AGORA! {original_caption}. Não vai acreditar no final! #fofoca #choquei #babadodosfamosos'"
+    )
 
     try:
         response = model.generate_content(prompt)
         new_caption = response.text.strip()
         
+        # Remove menções e URLs geradas pela IA
         new_caption = re.sub(r'@\w+', '', new_caption)
+        new_caption = re.sub(r'https?://[^\s]+', '', new_caption)
         
         return new_caption
     except Exception as e:
         print(f"❌ Erro ao gerar legenda com IA: {e}")
-        return f"🚨🚨 ALERTA: {original_caption}! 🔥"
+        return f"🚨🚨 ALERTA: {original_caption}! 🔥 #fofocanews"
 
-def repost_from(username):
+def repost_from_origin(username):
     try:
         user_id = cl.user_id_from_username(username)
-        # Tenta pegar os 5 posts mais recentes para buscar por algo não republicado
-        medias = cl.user_medias(user_id, 5) 
+        medias = cl.user_medias(user_id, 10) # Pega os 10 posts mais recentes
+
+        # Remove mídias já repostadas e sem descrição (evita lixo)
+        medias = [m for m in medias if str(m.pk) not in processed_media_ids and m.caption_text]
+        if not medias:
+            print(f"Nenhum post novo de @{username} para repostar.")
+            return
 
         # Ordena os posts pelo número de curtidas para usar a alavancagem
         medias.sort(key=lambda x: x.like_count, reverse=True)
+        media_to_repost = medias[0]
 
-        for media in medias:
-            if str(media.pk) in processed_media_ids:
-                print(f"Post {media.pk} de @{username} já foi repostado. Pulando...")
-                continue
-            
-            original_caption = media.caption_text or f"Conteúdo da @{username}"
-            new_caption = generate_aggressive_caption(original_caption, username)
+        # Adiciona lógica de proxy (se a lista não estiver vazia)
+        if PROXIES:
+            proxy = random.choice(PROXIES)
+            cl.set_proxy(proxy)
+            print(f"✅ Usando proxy: {proxy}")
 
-            if media.media_type == 1:
-                path = cl.photo_download(media.pk)
-                cl.photo_upload(path, new_caption)
-                print(f"🚀 Repost de foto de @{username} feito com sucesso com legenda manipuladora!")
+        original_caption = media_to_repost.caption_text
+        new_caption = generate_aggressive_caption(original_caption, username)
 
-            elif media.media_type == 2:
-                path = cl.video_download(media.pk)
-                cl.video_upload(path, new_caption)
-                print(f"🚀 Repost de vídeo de @{username} feito com sucesso com legenda manipuladora!")
+        if media_to_repost.media_type == 1:
+            path = cl.photo_download(media_to_repost.pk)
+            cl.photo_upload(path, new_caption)
+            print(f"🚀 Repost de foto de @{username} feito com sucesso!")
 
-            add_reposted_media_id(str(media.pk))
-            # Reposta apenas um por vez para evitar spam e garantir a qualidade
-            break 
+        elif media_to_repost.media_type == 2:
+            path = cl.video_download(media_to_repost.pk)
+            cl.video_upload(path, new_caption)
+            print(f"🚀 Repost de vídeo de @{username} feito com sucesso!")
+
+        add_reposted_media_id(str(media_to_repost.pk))
+        # Limpa os arquivos baixados pra não ocupar espaço
+        os.remove(path)
+
     except Exception as e:
         print(f"❌ Erro ao repostar de @{username}: {e}")
 
-# Loop infinito: verifica todas as contas a cada 30 min
+# --- Loop Principal de Operação (com horários humanos) ---
 while True:
-    for origin in ORIGINS:
-        repost_from(origin)
-    time.sleep(60 * 30)
+    hora = datetime.now().hour
+    if 2 <= hora <= 6:
+        # Frequência menor de madrugada
+        sleep_time = random.randint(3600, 5400) # 1h a 1h30
+        print(f"😴 Madrugada, dormindo por {sleep_time/60:.2f} minutos.")
+    else:
+        # Frequência normal
+        sleep_time = random.randint(1200, 2400) # 20 a 40 minutos
+        print(f"⏰ Horário comercial, próximo post em {sleep_time/60:.2f} minutos.")
 
+    time.sleep(sleep_time)
+
+    random.shuffle(ORIGINS) # Randomiza a ordem pra parecer humano
+    for origin in ORIGINS:
+        repost_from_origin(origin)
