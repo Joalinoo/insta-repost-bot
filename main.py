@@ -8,6 +8,7 @@ import re
 import json
 import csv
 from datetime import datetime
+from flask import Flask
 
 # --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
@@ -23,7 +24,7 @@ SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
 # --- Dados de Operação ---
-ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
+ORIGINS = ["alfinetei", "saiufofoca", "babados", "choquei"]
 
 # Proxies (Adicione seus próprios proxies aqui)
 # Use o formato "http://usuario:senha@ip:porta"
