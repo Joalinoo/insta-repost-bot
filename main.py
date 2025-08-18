@@ -8,7 +8,7 @@ import re
 import json
 import csv
 from datetime import datetime
-from flask import Flask # Adicionado a importação do Flask
+from flask import Flask
 
 # --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
@@ -27,7 +27,6 @@ REPOST_LOG_FILE = "repost_log.csv"
 ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
 
 # Proxies (Adicione seus próprios proxies aqui)
-# Use o formato "http://usuario:senha@ip:porta"
 PROXIES = [
     "http://user:pass@ip1:port",
     "http://user:pass@ip2:port",
@@ -134,19 +133,26 @@ def generate_aggressive_caption(original_caption, username):
 def repost_from_origin(username):
     try:
         user_id = cl.user_id_from_username(username)
-        medias = cl.user_medias(user_id, 10) # Pega os 10 posts mais recentes
+        medias = cl.user_medias(user_id, 10)  # Pega os 10 posts mais recentes
 
-        # Remove mídias já repostadas e sem descrição (evita lixo)
-        medias = [m for m in medias if str(m.pk) not in processed_media_ids and m.caption_text]
-        if not medias:
+        # 🔥 Filtro robusto: só mídias válidas e que não deram erro no pydantic
+        valid_medias = []
+        for m in medias:
+            try:
+                if str(m.pk) not in processed_media_ids and m.caption_text and m.media_type in [1, 2]:
+                    valid_medias.append(m)
+            except Exception as e:
+                print(f"⚠️ Mídia inválida ignorada de @{username}: {e}")
+
+        if not valid_medias:
             print(f"Nenhum post novo de @{username} para repostar.")
             return
 
-        # Ordena os posts pelo número de curtidas para usar a alavancagem
-        medias.sort(key=lambda x: x.like_count, reverse=True)
-        media_to_repost = medias[0]
+        # Ordena os posts pelo número de curtidas
+        valid_medias.sort(key=lambda x: x.like_count, reverse=True)
+        media_to_repost = valid_medias[0]
 
-        # Adiciona lógica de proxy (se a lista não estiver vazia)
+        # Usa proxy se disponível
         if PROXIES:
             proxy = random.choice(PROXIES)
             cl.set_proxy(proxy)
@@ -166,7 +172,6 @@ def repost_from_origin(username):
             print(f"🚀 Repost de vídeo de @{username} feito com sucesso!")
 
         add_reposted_media_id(str(media_to_repost.pk))
-        # Limpa os arquivos baixados pra não ocupar espaço
         os.remove(path)
 
     except Exception as e:
@@ -177,19 +182,16 @@ def start_bot_loop():
     while True:
         hora = datetime.now().hour
         if 2 <= hora <= 6:
-            # Frequência menor de madrugada
-            sleep_time = random.randint(3600, 5400) # 1h a 1h30
+            sleep_time = random.randint(3600, 5400)  # 1h a 1h30
             print(f"😴 Madrugada, dormindo por {sleep_time/60:.2f} minutos.")
         else:
-            # Frequência normal
-            sleep_time = random.randint(1200, 2400) # 20 a 40 minutos
+            sleep_time = random.randint(1200, 2400)  # 20 a 40 minutos
             print(f"⏰ Horário comercial, próximo post em {sleep_time/60:.2f} minutos.")
 
-        random.shuffle(ORIGINS) # Randomiza a ordem pra parecer humano
+        random.shuffle(ORIGINS)
         for origin in ORIGINS:
             repost_from_origin(origin)
 
-        # Adiciona o contador regressivo antes do sleep
         for remaining_time in range(sleep_time, 0, -1):
             if remaining_time % 60 == 0:
                 print(f"Próxima postagem em {remaining_time // 60} minutos...")
@@ -202,9 +204,7 @@ app = Flask(__name__)
 def index():
     return "Bot está rodando 🚀"
 
-# Inicia o loop do bot em background
 threading.Thread(target=start_bot_loop, daemon=True).start()
 
-# Inicia o servidor Flask como processo principal
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
