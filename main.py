@@ -24,7 +24,7 @@ SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
 # --- Dados de Operação ---
-ORIGINS = ["alfinetei", "saiufofoca", "babados", "choquei"]
+ORIGINS = ["alfinetei", "saiufofoca", "babados"]
 
 # Proxies (Lista vazia para evitar o erro)
 PROXIES = []
