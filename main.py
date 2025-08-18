@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import threading
 from instagrapi import Client
 import google.generativeai as genai
 import re
@@ -8,7 +9,6 @@ import json
 import csv
 from datetime import datetime
 from flask import Flask
-import threading
 
 # --- Configurações de Ambiente ---
 USERNAME = os.getenv("IG_USERNAME")
@@ -24,7 +24,7 @@ SESSION_FILE = "session.json"
 REPOST_LOG_FILE = "repost_log.csv"
 
 # --- Dados de Operação ---
-ORIGINS = ["alfinetei", "saiufofoca", "babados", "portalg1"]
+ORIGINS = ["alfinetei", "saiufofoca", "babados", "choquei"]
 
 # Proxies (Adicione seus próprios proxies aqui)
 # Use o formato "http://usuario:senha@ip:porta"
@@ -198,11 +198,9 @@ app = Flask(__name__)
 def index():
     return "Bot está rodando 🚀"
 
-def run_flask():
+# Inicia o loop do bot em background
+threading.Thread(target=start_bot_loop, daemon=True).start()
+
+# Inicia o servidor Flask como processo principal
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-# Inicia o servidor Flask em paralelo com o bot
-threading.Thread(target=run_flask).start()
-
-# Inicia o loop do bot em paralelo
-threading.Thread(target=start_bot_loop).start()
