@@ -2,205 +2,141 @@ import os
 import time
 import random
 import threading
-from instagrapi import Client
-import google.generativeai as genai
-import re
 import json
-import csv
 from datetime import datetime
 from flask import Flask
 
-# --- Configurações de Ambiente ---
-USERNAME = os.getenv("IG_USERNAME")
-PASSWORD = os.getenv("IG_PASSWORD")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-IG_VERIFICATION_CODE = os.getenv("IG_VERIFICATION_CODE")
+from scraper import collect_news_items
+from insta_bot import InstagramBot, safe_filename
 
-# --- Configurações da Máquina ---
-genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# --------------- ENV CONFIG ---------------
+IG_USERNAME = os.getenv("IG_USERNAME")
+IG_PASSWORD = os.getenv("IG_PASSWORD")
+IG_VERIFICATION_CODE = os.getenv("IG_VERIFICATION_CODE", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")  # optional for AI captions
 
-SESSION_FILE = "session.json"
-REPOST_LOG_FILE = "repost_log.csv"
+# Comma-separated list of sites. Default: Purepeople home.
+SCRAPE_SITES = [s.strip() for s in os.getenv("SCRAPE_SITES", "https://www.purepeople.com.br/").split(",") if s.strip()]
 
-# --- Dados de Operação ---
-ORIGINS = ["saiufofoca", "babados"]
+# Minutes between scraping/post cycles (randomized a bit to look human)
+BASE_SLEEP_MIN = int(os.getenv("BASE_SLEEP_MIN", "5"))  # default 5 min
+RANDOM_JITTER_MIN = int(os.getenv("RANDOM_JITTER_MIN", "3"))  # +/- jitter
 
-# Proxies (Adicione seus próprios proxies aqui)
-PROXIES = []
+# Max posts per cycle (avoid floods)
+MAX_POSTS_PER_CYCLE = int(os.getenv("MAX_POSTS_PER_CYCLE", "2"))
 
-# Mapeamento de emoções para palavras-chave
-EMOTION_MAP = {
-    "choque": ["absurdo", "chocante", "inacreditável", "revoltante"],
-    "curiosidade": ["descobriu", "segredo", "por que", "entenda"],
-    "raiva": ["revolta", "absurdo", "inacreditável", "sem noção"],
-    "ganancia": ["dinheiro", "milhões", "oportunidade", "rico"],
-}
+# Hashtags extras (comma-separated)
+EXTRA_HASHTAGS = [h.strip() for h in os.getenv("EXTRA_HASHTAGS", "fofoca,choquei,babado,famosos,urgente,brasil").split(",") if h.strip()]
 
-# --- Lógica de Login e Sessão ---
-cl = Client()
+POSTED_DB_FILE = os.getenv("POSTED_DB_FILE", "posted.json")  # tracks URLs already posted
 
-def login_and_save_session():
-    try:
-        print("Tentando login manual...")
-        cl.login(USERNAME, PASSWORD)
-    except Exception as e:
-        if "challenge_required" in str(e):
-            if IG_VERIFICATION_CODE:
-                try:
-                    cl.challenge_code(USERNAME, IG_VERIFICATION_CODE)
-                    print("Código de verificação aceito. Sessão salva!")
-                except Exception as challenge_e:
-                    print("--------------------------------------------------")
-                    print("❌ ERRO: O CÓDIGO DE VERIFICAÇÃO É INVÁLIDO OU EXPIROU.")
-                    print("⚠️ Insira um novo código na variável IG_VERIFICATION_CODE do Render.")
-                    print("--------------------------------------------------")
-                    raise challenge_e
-            else:
-                print("--------------------------------------------------")
-                print("❌ ERRO: O SCRIPT PRECISA DE UM CÓDIGO DE VERIFICAÇÃO.")
-                print("⚠️ Insira o código na variável IG_VERIFICATION_CODE do Render.")
-                print("--------------------------------------------------")
-                raise e
-        else:
-            raise e
-    cl.dump_settings(SESSION_FILE)
-    print("Sessão salva em session.json. Agora a vida vai ser fácil.")
+# --------------- RUNTIME STATE ---------------
+app = Flask(__name__)
+bot = InstagramBot(username=IG_USERNAME, password=IG_PASSWORD, verification_code=IG_VERIFICATION_CODE, google_api_key=GOOGLE_API_KEY)
 
-if os.path.exists(SESSION_FILE):
-    try:
-        cl.load_settings(SESSION_FILE)
-        cl.login(USERNAME, PASSWORD)
-        print("🚀 Sessão carregada com sucesso!")
-    except Exception as e:
-        print(f"❌ Erro ao carregar a sessão, tentando login manual... {e}")
-        login_and_save_session()
-else:
-    login_and_save_session()
-
-# --- Lógica de Log de Posts ---
-def get_reposted_media_ids():
-    if not os.path.exists(REPOST_LOG_FILE):
+def load_posted_db():
+    if not os.path.exists(POSTED_DB_FILE):
+        with open(POSTED_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f)
         return set()
-    with open(REPOST_LOG_FILE, 'r') as f:
-        reader = csv.reader(f)
-        return set(row[0] for row in reader)
-
-def add_reposted_media_id(media_id):
-    with open(REPOST_LOG_FILE, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([media_id])
-
-processed_media_ids = get_reposted_media_ids()
-
-# --- Funções do Robô ---
-def generate_aggressive_caption(original_caption, username):
-    detected_emotion = "curiosidade"
-    for emotion, keywords in EMOTION_MAP.items():
-        for keyword in keywords:
-            if keyword in original_caption.lower():
-                detected_emotion = emotion
-                break
-        if detected_emotion != "curiosidade":
-            break
-
-    prompt = (
-        f"Gere uma legenda para um post de mídia social no estilo 'clickbait' e extremamente agressivo, "
-        f"com base na seguinte descrição: '{original_caption}'. O objetivo é manipular o usuário a interagir, "
-        f"usando os gatilhos de {detected_emotion}. A legenda deve ser curta, sem menção à fonte original (@{username}), "
-        f"e deve incluir um CTA (Chamada para Ação) no final, tipo 'Comenta o que tu acha', "
-        f"'Não vai acreditar nisso', etc. Adicione 4 a 6 hashtags populares relacionadas ao tema. "
-        f"Exemplo de resposta: 'DESCUBRA AGORA! {original_caption}. Não vai acreditar no final! #fofoca #choquei #babadodosfamosos'"
-    )
-
     try:
-        response = model.generate_content(prompt)
-        new_caption = response.text.strip()
-        
-        # Remove menções e URLs geradas pela IA
-        new_caption = re.sub(r'@\w+', '', new_caption)
-        new_caption = re.sub(r'https?://[^\s]+', '', new_caption)
-        
-        return new_caption
+        with open(POSTED_DB_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    except Exception:
+        with open(POSTED_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f)
+        return set()
+
+def save_posted_db(posted_set):
+    try:
+        with open(POSTED_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(sorted(list(posted_set)), f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"❌ Erro ao gerar legenda com IA: {e}")
-        return f"🚨🚨 ALERTA: {original_caption}! 🔥 #fofocanews"
+        print(f"⚠️ Erro salvando posted.json: {e}")
 
-def repost_from_origin(username):
+POSTED = load_posted_db()
+
+def build_caption(item):
+    base = item.get("title", "").strip()
+    summary = item.get("summary", "").strip()
+    if summary and len(summary) > 20:
+        base_line = f"{base} — {summary}"
+    else:
+        base_line = base
+
+    hashtags = " ".join("#" + h.replace("#","").strip() for h in EXTRA_HASHTAGS[:6])
+
+    caption = bot.generate_ai_caption(base_line, fallback=None)
+    if not caption:
+        caption = f"{base_line}\n\nO que tu acha disso? Comenta! 👇\n{hashtags}"
+    return caption
+
+def process_cycle():
+    global POSTED
+    print(f"🛰️ [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Iniciando ciclo de scraping/postagem...")
+    print(f"🎭 Estilo de legenda ativo: {bot.caption_style or 'default'}")
     try:
-        user_id = cl.user_id_from_username(username)
-        medias = cl.user_medias(user_id, 10)  # Pega os 10 posts mais recentes
-
-        # 🔥 Filtro robusto: só mídias válidas e que não deram erro no pydantic
-        valid_medias = []
-        for m in medias:
-            try:
-                if str(m.pk) not in processed_media_ids and m.caption_text and m.media_type in [1, 2]:
-                    valid_medias.append(m)
-            except Exception as e:
-                print(f"⚠️ Mídia inválida ignorada de @{username}: {e}")
-
-        if not valid_medias:
-            print(f"Nenhum post novo de @{username} para repostar.")
+        items = collect_news_items(SCRAPE_SITES, max_items=10)
+        new_items = [it for it in items if it.get('url') and it['url'] not in POSTED]
+        if not new_items:
+            print("ℹ️ Nenhuma notícia nova encontrada.")
             return
 
-        # Ordena os posts pelo número de curtidas
-        valid_medias.sort(key=lambda x: x.like_count, reverse=True)
-        media_to_repost = valid_medias[0]
+        random.shuffle(new_items)
+        to_post = new_items[:MAX_POSTS_PER_CYCLE]
 
-        # Usa proxy se disponível
-        if PROXIES:
-            proxy = random.choice(PROXIES)
-            cl.set_proxy(proxy)
-            print(f"✅ Usando proxy: {proxy}")
+        for it in to_post:
+            print(f"➡️ Preparando para postar: {it.get('title')} ({it.get('url')})")
+            uploaded = False
+            if it.get("video_url") and it["video_url"].lower().endswith(".mp4"):
+                try:
+                    caption = build_caption(it)
+                    bot.post_video_from_url(it["video_url"], caption)
+                    uploaded = True
+                    print("🎬 Vídeo postado com sucesso.")
+                except Exception as e:
+                    print(f"⚠️ Falha ao postar vídeo (vai tentar imagem): {e}")
 
-        original_caption = media_to_repost.caption_text
-        new_caption = generate_aggressive_caption(original_caption, username)
+            if not uploaded and it.get("image_url"):
+                try:
+                    caption = build_caption(it)
+                    bot.post_photo_from_url(it["image_url"], caption)
+                    uploaded = True
+                    print("🖼️ Foto postada com sucesso.")
+                except Exception as e:
+                    print(f"❌ Erro ao postar foto: {e}")
 
-        if media_to_repost.media_type == 1:
-            path = cl.photo_download(media_to_repost.pk)
-            cl.photo_upload(path, new_caption)
-            print(f"🚀 Repost de foto de @{username} feito com sucesso!")
-
-        elif media_to_repost.media_type == 2:
-            path = cl.video_download(media_to_repost.pk)
-            cl.video_upload(path, new_caption)
-            print(f"🚀 Repost de vídeo de @{username} feito com sucesso!")
-
-        add_reposted_media_id(str(media_to_repost.pk))
-        os.remove(path)
-
+            if uploaded:
+                POSTED.add(it["url"])
+                save_posted_db(POSTED)
+            else:
+                print("⚠️ Nada foi postado para este item (sem mídia válida).")
     except Exception as e:
-        print(f"❌ Erro ao repostar de @{username}: {e}")
+        print(f"❌ Erro no ciclo: {e}")
 
-# --- Loop Principal de Operação (com horários humanos) ---
-def start_bot_loop():
+def loop_runner():
+    bot.ensure_login()
     while True:
-        hora = datetime.now().hour
-        if 2 <= hora <= 6:
-            sleep_time = random.randint(3600, 5400)  # 1h a 1h30
-            print(f"😴 Madrugada, dormindo por {sleep_time/60:.2f} minutos.")
+        hour = datetime.now().hour
+        if 2 <= hour <= 6:
+            base_sleep = max(BASE_SLEEP_MIN, 30)
+            jitter = random.randint(5, 10)
         else:
-            sleep_time = random.randint(1200, 2400)  # 20 a 40 minutos
-            print(f"⏰ Horário comercial, próximo post em {sleep_time/60:.2f} minutos.")
+            base_sleep = BASE_SLEEP_MIN
+            jitter = random.randint(-RANDOM_JITTER_MIN, RANDOM_JITTER_MIN)
 
-        random.shuffle(ORIGINS)
-        for origin in ORIGINS:
-            repost_from_origin(origin)
+        process_cycle()
 
-        for remaining_time in range(sleep_time, 0, -1):
-            if remaining_time % 60 == 0:
-                print(f"Próxima postagem em {remaining_time // 60} minutos...")
+        sleep_minutes = max(1, base_sleep + jitter)
+        print(f"⏳ Próximo ciclo em ~{sleep_minutes} minutos.")
+        for _ in range(sleep_minutes * 60):
             time.sleep(1)
-
-# --- Servidor de fachada para o Render ---
-app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return "Bot está rodando 🚀"
+    return "Scraper + Insta bot ativo 🚀"
 
-threading.Thread(target=start_bot_loop, daemon=True).start()
+threading.Thread(target=loop_runner, daemon=True).start()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
