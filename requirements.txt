@@ -1,27 +1,6 @@
-instagrapi==2.1.2
-google-generativeai
-Pillow
-Flask
-feedparser
-
-# Requests e scraping
-requests
-beautifulsoup4
+Flask==3.0.3
+requests==2.32.3
+beautifulsoup4==4.12.3
 lxml==4.9.3
-selenium
-webdriver-manager
-
-# Controle de tarefas / agendamento
-schedule
-APScheduler
-
-# JSON, manipulação de dados
-pandas
-python-dotenv
-
-# AI / Gemini / OpenAI
-openai
-httpx
-
-# Logging e utils
-loguru==0.7.0
+instagrapi==2.1.2
+Pillow==10.3.0
