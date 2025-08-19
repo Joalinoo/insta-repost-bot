@@ -16,7 +16,7 @@ IG_VERIFICATION_CODE = os.getenv("IG_VERIFICATION_CODE", "")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")  # optional for AI captions
 
 # Comma-separated list of sites. Default: Purepeople home.
-SCRAPE_SITES = [s.strip() for s in os.getenv("SCRAPE_SITES", "https://www.purepeople.com.br/").split(",") if s.strip()]
+SCRAPE_SITES = [s.strip() for s in os.getenv("SCRAPE_SITES", "https://www.purepeople.com.br/,https://ofuxico.com.br/todas-as-noticias/").split(",") if s.strip()]
 
 # Minutes between scraping/post cycles (randomized a bit to look human)
 BASE_SLEEP_MIN = int(os.getenv("BASE_SLEEP_MIN", "5"))  # default 5 min
