@@ -15,4 +15,3 @@ APScheduler==3.10.0
 # JSON, manipulação de dados
 python-dotenv==1.0.1
 
-pip  install  --upgrade  pip
