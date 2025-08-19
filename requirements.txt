@@ -8,7 +8,7 @@ feedparser
 requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
-selenium==5.9.0
+selenium
 webdriver-manager==4.1.1
 
 # Controle de tarefas / agendamento
