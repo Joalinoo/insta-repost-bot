@@ -7,7 +7,7 @@ feedparser
 # Requests e scraping
 requests
 beautifulsoup4
-lxml
+lxml==4.9.3
 selenium
 webdriver-manager
 
