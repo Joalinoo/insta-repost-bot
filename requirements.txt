@@ -2,6 +2,26 @@ instagrapi==1.19.6
 google-generativeai
 Pillow
 Flask
-requests
-beautifulsoup4
 feedparser
+
+# Requests e scraping
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+selenium==5.9.0
+webdriver-manager==4.1.1
+
+# Controle de tarefas / agendamento
+schedule==1.2.0
+APScheduler==3.10.0
+
+# JSON, manipulação de dados
+pandas==2.1.1
+python-dotenv==1.0.1
+
+# AI / Gemini / OpenAI
+openai==1.30.0
+httpx==0.26.1
+
+# Logging e utils
+loguru==0.7.0
