@@ -6,7 +6,7 @@ import tempfile
 
 # -------- Prompt Styles --------
 PROMPTS = {
-    "choquei": """Transforme a notícia abaixo em uma legenda estilo página de fofoca sensacionalista.
+    "choquei": """Transforme a notícia abaixo em uma legenda estilo página de fofoca sensacionalista. com um pequeno resumo para melhor entendimento.
 Seja impactante, use emojis 🔥👀💣, crie suspense e estimule comentários.
 Adicione 3-6 hashtags virais no final.
 Texto-base:\n""",
