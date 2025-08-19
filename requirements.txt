@@ -6,7 +6,7 @@ instagrapi==2.1.2
 Pillow
 pydantic-core
 cryptography==42.0.5
-pydantic==2.7.0
+pydantic
 
 webdriver-manager
 schedule==1.2.0
