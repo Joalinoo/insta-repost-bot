@@ -1,4 +1,4 @@
-instagrapi==1.19.6
+instagrapi==2.1.2
 google-generativeai
 Pillow
 Flask
