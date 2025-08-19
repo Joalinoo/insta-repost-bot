@@ -3,10 +3,10 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 lxml==4.9.3
 instagrapi==2.1.2
-Pillow
-pydantic-core
-cryptography==42.0.5
-pydantic
+Pillow==10.3.0
+pydantic==1.10.13
+pydantic-core==2.16.3
+
 
 webdriver-manager
 schedule==1.2.0
