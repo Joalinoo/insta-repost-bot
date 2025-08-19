@@ -4,5 +4,14 @@ beautifulsoup4==4.12.3
 lxml==4.9.3
 instagrapi==2.1.2
 Pillow
-pydantic
 pydantic-core
+cryptography==42.0.5
+pydantic==2.7.0
+
+webdriver-manager
+schedule==1.2.0
+APScheduler==3.10.0
+
+# JSON, manipulação de dados
+pandas==2.1.1
+python-dotenv==1.0.1
