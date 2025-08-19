@@ -2,3 +2,6 @@ instagrapi==1.19.6
 google-generativeai
 Pillow
 Flask
+requests
+beautifulsoup4
+feedparser
