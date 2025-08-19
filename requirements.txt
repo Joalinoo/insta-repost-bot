@@ -3,4 +3,6 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 lxml==4.9.3
 instagrapi==2.1.2
-Pillow
+Pillow==10.3.0
+pydantic==1.10.13
+pydantic-core==2.16.3
