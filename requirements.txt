@@ -1,17 +1,20 @@
+# Servidor Flask
 Flask==3.0.3
+gunicorn==21.2.0
+
+# HTTP Requests
 requests==2.32.3
+
+# Scraping (sites de fofoca, PurePeople, etc)
 beautifulsoup4==4.12.3
 lxml==4.9.3
-instagrapi==2.1.2
-Pillow==10.3.0
-pydantic
-pydantic-core
 
-webdriver-manager
+# Imagens (tratamento básico)
+Pillow==10.3.0
+
+# Agendamento de tarefas
 schedule==1.2.0
 APScheduler==3.10.0
 
-# JSON, manipulação de dados
+# Variáveis de ambiente
 python-dotenv==1.0.1
-
-gunicorn==21.2.0
