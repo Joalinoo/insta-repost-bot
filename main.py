@@ -49,6 +49,10 @@ def post_to_instagram(image_url, caption):
     Publica no Instagram via Graph API.
     IMPORTANTE: PAGE_ID deve ser da conta que administra o Instagram Business.
     """
+    if not ACCESS_TOKEN:
+        print("⚠️ Nenhum ACCESS_TOKEN configurado. Pulei a postagem.")
+        return
+
     endpoint = f"https://graph.facebook.com/v21.0/{PAGE_ID}/photos"
     payload = {
         "url": image_url,
@@ -80,7 +84,7 @@ def main():
         caption = summarize_with_gemini(post["text"])
         print("Legenda gerada:", caption)
 
-        # Publica no Instagram
+        # Publica no Instagram (ou pula se não tiver token)
         post_to_instagram(post["image"], caption)
 
         # Marca como postado
