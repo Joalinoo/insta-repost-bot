@@ -97,3 +97,22 @@ def collect_news_items(sites, max_items=10):
         deduped.append(it)
         seen.add(it["url"])
     return deduped[:max_items]
+
+
+def get_latest_posts():
+    """
+    Função principal que o main.py espera.
+    Retorna uma lista de posts.
+    """
+    sites_to_scrape = ["https://www.purepeople.com.br/famosos", "https://www.purepeople.com.br/noticias"]
+    scraped_items = collect_news_items(sites_to_scrape)
+    formatted_posts = []
+    for item in scraped_items:
+        formatted_posts.append({
+            "id": item.get("url"),
+            "title": item.get("title"),
+            "text": item.get("summary"),
+            "image": item.get("image_url")
+        })
+    return formatted_posts
+    
