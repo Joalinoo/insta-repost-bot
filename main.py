@@ -2,8 +2,10 @@ import os
 import json
 import time
 import requests
+import threading
 from scraper import get_latest_posts
 from dotenv import load_dotenv
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -66,37 +68,63 @@ def post_to_instagram(image_url, caption):
         print("❌ Erro ao postar:", resp.text)
 
 # ----------------------
-# Fluxo principal
+# Lógica do bot (rodando em thread)
 # ----------------------
 
-def main():
-    posted = load_posted()
-    posts = get_latest_posts()
-
-    for post in posts:
-        post_id = post["id"]
-        if post_id in posted:
-            continue  # já postado
-
-        print(f"📰 Nova notícia encontrada: {post['title']}")
-
-        # Gera legenda resumida
-        caption = summarize_with_gemini(post["text"])
-        print("Legenda gerada:", caption)
-
-        # Publica no Instagram (ou pula se não tiver token)
-        post_to_instagram(post["image"], caption)
-
-        # Marca como postado
-        posted.append(post_id)
-        save_posted(posted)
-
-        time.sleep(60)  # espera 1 min entre posts (evitar flood)
-
-if __name__ == "__main__":
+def bot_main_loop():
     while True:
         try:
-            main()
+            posted = load_posted()
+            posts = get_latest_posts()
+
+            for post in posts:
+                post_id = post["id"]
+                if post_id in posted:
+                    continue  # já postado
+
+                print(f"📰 Nova notícia encontrada: {post['title']}")
+
+                # Gera legenda resumida
+                caption = summarize_with_gemini(post["text"])
+                print("Legenda gerada:", caption)
+
+                # Publica no Instagram (ou pula se não tiver token)
+                post_to_instagram(post["image"], caption)
+
+                # Marca como postado
+                posted.append(post_id)
+                save_posted(posted)
+
+                time.sleep(60)  # espera 1 min entre posts (evitar flood)
+
         except Exception as e:
-            print("Erro no loop:", e)
+            print("Erro no loop principal:", e)
         time.sleep(300)  # checa a cada 5 min
+
+# ----------------------
+# Servidor web simples para o Render
+# ----------------------
+
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'OK')
+
+def run_web_server():
+    """Mantém uma porta aberta para o Render."""
+    port = int(os.environ.get("PORT", 8080))
+    server_address = ('0.0.0.0', port)
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    print(f"✅ Servidor web rodando na porta {port}")
+    httpd.serve_forever()
+
+if __name__ == "__main__":
+    # Inicia o loop do bot em uma thread separada
+    bot_thread = threading.Thread(target=bot_main_loop)
+    bot_thread.daemon = True # Garante que a thread será encerrada quando o programa principal for
+    bot_thread.start()
+
+    # Inicia o servidor web
+    run_web_server()
+        
