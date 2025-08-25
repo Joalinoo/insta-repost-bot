@@ -4,26 +4,23 @@ import time
 import requests
 import threading
 import google.generativeai as genai
+from functools import lru_cache
 from scraper import get_latest_posts
 from dotenv import load_dotenv
 from flask import Flask
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Carregar variáveis de ambiente
+# --- Carregar variáveis
 load_dotenv()
-
-# --- Configurações
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-PAGE_ID = os.getenv("PAGE_ID")  # ainda guardamos caso precise
-IG_USER_ID = os.getenv("IG_USER_ID")  # 🔥 agora fixo do .env
+IG_USER_ID = os.getenv("IG_USER_ID")  # agora fixo no .env
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 POSTED_FILE = "posted.json"
-
 GRAPH = "https://graph.facebook.com/v21.0"
 app = Flask(__name__)
 
-# --- Funções Auxiliares
+# --- Helpers
 def load_posted():
     if not os.path.exists(POSTED_FILE):
         return []
@@ -46,56 +43,50 @@ def summarize_with_gemini(text):
     response = model.generate_content(prompt)
     return response.text.strip()
 
-# --- Postagem no Instagram
-def post_to_instagram(media_url, caption, media_type="image"):
-    if not ACCESS_TOKEN:
-        print("⚠️ Nenhum ACCESS_TOKEN configurado. Pulei a postagem.")
-        return
-
-    if not IG_USER_ID:
-        print("❌ Nenhum IG_USER_ID configurado. Configure no .env")
+# --- Postagem
+def post_to_instagram(media_url, caption, is_video=False):
+    if not ACCESS_TOKEN or not IG_USER_ID:
+        print("⚠️ ACCESS_TOKEN ou IG_USER_ID não configurados. Pulei a postagem.")
         return
 
     try:
+        # Criação do container
         container_url = f"{GRAPH}/{IG_USER_ID}/media"
-        container_payload = {
+        payload = {
             "caption": caption,
             "access_token": ACCESS_TOKEN
         }
 
-        if media_type == "image":
-            container_payload["image_url"] = media_url
-        elif media_type == "video":
-            container_payload["media_type"] = "VIDEO"
-            container_payload["video_url"] = media_url
+        if is_video:
+            payload["media_type"] = "VIDEO"
+            payload["video_url"] = media_url
         else:
-            print(f"⚠️ Tipo de mídia não suportado: {media_type}")
-            return
+            payload["image_url"] = media_url
 
-        # Cria o container
-        c = requests.post(container_url, data=container_payload, timeout=60)
+        print(f"🚀 Criando container ({'vídeo' if is_video else 'imagem'})...")
+        c = requests.post(container_url, data=payload, timeout=60)
         c.raise_for_status()
         creation_id = c.json().get("id")
         if not creation_id:
-            print("❌ Sem creation_id no retorno:", c.text)
+            print("❌ Falha: sem creation_id no retorno:", c.text)
             return
 
-        # Publica
+        # Publicação
         publish_url = f"{GRAPH}/{IG_USER_ID}/media_publish"
         p = requests.post(
             publish_url,
             data={"creation_id": creation_id, "access_token": ACCESS_TOKEN},
-            timeout=30
+            timeout=60
         )
         p.raise_for_status()
-        print(f"✅ {media_type.capitalize()} publicado no Instagram:", p.json())
+        print("✅ Post publicado com sucesso:", p.json())
 
     except requests.exceptions.RequestException as e:
         print("❌ Erro de requisição na postagem:", e)
     except Exception as e:
         print("❌ Erro inesperado na postagem:", e)
 
-# --- Fluxo principal do bot (rodando em thread)
+# --- Loop principal
 def bot_main_loop():
     while True:
         try:
@@ -107,27 +98,31 @@ def bot_main_loop():
                 if post_id in posted:
                     continue
 
-                print(f"📰 Nova notícia encontrada: {post['title']}")
-                caption = summarize_with_gemini(post["text"])
-                print("Legenda gerada:", caption)
+                print(f"\n📰 Nova notícia: {post['title']}")
+                caption = summarize_with_gemini(post["text"] or "")
+                print("📝 Legenda gerada:", caption[:120], "...")
 
-                # Decide tipo de mídia
-                if "video" in post and post["video"]:
-                    post_to_instagram(post["video"], caption, media_type="video")
-                elif "image" in post and post["image"]:
-                    post_to_instagram(post["image"], caption, media_type="image")
+                if post.get("video"):
+                    print("🎥 Tentando postar vídeo...")
+                    post_to_instagram(post["video"], caption, is_video=True)
+                elif post.get("image"):
+                    print("🖼️ Tentando postar imagem...")
+                    post_to_instagram(post["image"], caption, is_video=False)
                 else:
-                    print("⚠️ Post sem mídia válida:", post)
+                    print("⚠️ Nenhuma mídia encontrada, pulei.")
+                    continue
 
                 posted.append(post_id)
                 save_posted(posted)
-                time.sleep(60)
+                time.sleep(60)  # pausa entre posts
 
         except Exception as e:
-            print("Erro no loop principal:", e)
-        time.sleep(300)
+            print("💥 Erro no loop principal:", e)
 
-# --- Servidor web simples para o Render
+        print("⏳ Aguardando próxima varredura...")
+        time.sleep(300)  # 5 min
+
+# --- Servidor keep-alive (Render)
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -138,7 +133,7 @@ def run_web_server():
     port = int(os.environ.get("PORT", 8080))
     server_address = ('0.0.0.0', port)
     httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
-    print(f"✅ Servidor web rodando na porta {port}")
+    print(f"🌐 Servidor web rodando na porta {port}")
     httpd.serve_forever()
 
 if __name__ == "__main__":
