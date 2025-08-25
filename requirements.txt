@@ -15,7 +15,7 @@ Pillow==10.3.0
 # Agendamento de tarefas
 schedule==1.2.0
 APScheduler==3.10.0
-
+Pillow
 # Variáveis de ambiente
 python-dotenv==1.0.1
 
