@@ -4,10 +4,9 @@ import time
 import requests
 import threading
 import google.generativeai as genai
-from functools import lru_cache
 from scraper import get_latest_posts
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Carregar variáveis de ambiente
@@ -15,7 +14,8 @@ load_dotenv()
 
 # --- Configurações
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-PAGE_ID = os.getenv("PAGE_ID")
+PAGE_ID = os.getenv("PAGE_ID")  # ainda guardamos caso precise
+IG_USER_ID = os.getenv("IG_USER_ID")  # 🔥 agora fixo do .env
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 POSTED_FILE = "posted.json"
@@ -46,58 +46,49 @@ def summarize_with_gemini(text):
     response = model.generate_content(prompt)
     return response.text.strip()
 
-@lru_cache(maxsize=1)
-def get_ig_user_id(page_id, access_token):
-    url = f"{GRAPH}/{page_id}"
-    params = {
-        "fields": "instagram_business_account{id}",
-        "access_token": access_token
-    }
-    try:
-        r = requests.get(url, params=params, timeout=20)
-        r.raise_for_status()
-        data = r.json()
-        ig = data.get("instagram_business_account", {})
-        ig_id = ig.get("id")
-        if not ig_id:
-            raise RuntimeError(f"PAGE_ID sem instagram_business_account vinculado. Resp: {data}")
-        return ig_id
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Erro de requisição ao obter IG User ID: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Erro inesperado ao obter IG User ID: {e}")
-        return None
-
-def post_to_instagram(image_url, caption):
+# --- Postagem no Instagram
+def post_to_instagram(media_url, caption, media_type="image"):
     if not ACCESS_TOKEN:
         print("⚠️ Nenhum ACCESS_TOKEN configurado. Pulei a postagem.")
         return
 
-    try:
-        ig_user_id = get_ig_user_id(PAGE_ID, ACCESS_TOKEN)
-        if not ig_user_id:
-            return
+    if not IG_USER_ID:
+        print("❌ Nenhum IG_USER_ID configurado. Configure no .env")
+        return
 
-        # 1) Cria o container
-        container_url = f"{GRAPH}/{ig_user_id}/media"
+    try:
+        container_url = f"{GRAPH}/{IG_USER_ID}/media"
         container_payload = {
-            "image_url": image_url,
             "caption": caption,
             "access_token": ACCESS_TOKEN
         }
-        c = requests.post(container_url, data=container_payload, timeout=30)
+
+        if media_type == "image":
+            container_payload["image_url"] = media_url
+        elif media_type == "video":
+            container_payload["media_type"] = "VIDEO"
+            container_payload["video_url"] = media_url
+        else:
+            print(f"⚠️ Tipo de mídia não suportado: {media_type}")
+            return
+
+        # Cria o container
+        c = requests.post(container_url, data=container_payload, timeout=60)
         c.raise_for_status()
         creation_id = c.json().get("id")
         if not creation_id:
             print("❌ Sem creation_id no retorno:", c.text)
             return
 
-        # 2) Publica
-        publish_url = f"{GRAPH}/{ig_user_id}/media_publish"
-        p = requests.post(publish_url, data={"creation_id": creation_id, "access_token": ACCESS_TOKEN}, timeout=30)
+        # Publica
+        publish_url = f"{GRAPH}/{IG_USER_ID}/media_publish"
+        p = requests.post(
+            publish_url,
+            data={"creation_id": creation_id, "access_token": ACCESS_TOKEN},
+            timeout=30
+        )
         p.raise_for_status()
-        print("✅ Post publicado no Instagram:", p.json())
+        print(f"✅ {media_type.capitalize()} publicado no Instagram:", p.json())
 
     except requests.exceptions.RequestException as e:
         print("❌ Erro de requisição na postagem:", e)
@@ -119,7 +110,15 @@ def bot_main_loop():
                 print(f"📰 Nova notícia encontrada: {post['title']}")
                 caption = summarize_with_gemini(post["text"])
                 print("Legenda gerada:", caption)
-                post_to_instagram(post["image"], caption)
+
+                # Decide tipo de mídia
+                if "video" in post and post["video"]:
+                    post_to_instagram(post["video"], caption, media_type="video")
+                elif "image" in post and post["image"]:
+                    post_to_instagram(post["image"], caption, media_type="image")
+                else:
+                    print("⚠️ Post sem mídia válida:", post)
+
                 posted.append(post_id)
                 save_posted(posted)
                 time.sleep(60)
