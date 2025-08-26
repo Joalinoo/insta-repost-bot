@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from flask import Flask
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+
+
 # --- Carregar variáveis
 load_dotenv()
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
@@ -43,8 +45,10 @@ def summarize_with_gemini(text):
     response = model.generate_content(prompt)
     return response.text.strip()
 
+
+
 # --- Postagem
-def post_to_instagram(media_url, caption, is_video=False):
+def post_to_instagram(media_url, caption):
     if not ACCESS_TOKEN or not IG_USER_ID:
         print("⚠️ ACCESS_TOKEN ou IG_USER_ID não configurados. Pulei a postagem.")
         return
@@ -54,16 +58,11 @@ def post_to_instagram(media_url, caption, is_video=False):
         container_url = f"{GRAPH}/{IG_USER_ID}/media"
         payload = {
             "caption": caption,
+            "image_url": media_url,
             "access_token": ACCESS_TOKEN
         }
 
-        if is_video:
-            payload["media_type"] = "VIDEO"
-            payload["video_url"] = media_url
-        else:
-            payload["image_url"] = media_url
-
-        print(f"🚀 Criando container ({'vídeo' if is_video else 'imagem'})...")
+        print(f"🚀 Criando container (imagem)...")
         c = requests.post(container_url, data=payload, timeout=60)
         c.raise_for_status()
         creation_id = c.json().get("id")
@@ -102,12 +101,12 @@ def bot_main_loop():
                 caption = summarize_with_gemini(post["text"] or "")
                 print("📝 Legenda gerada:", caption[:120], "...")
 
-                if post.get("video"):
-                    print("🎥 Tentando postar vídeo...")
-                    post_to_instagram(post["video"], caption, is_video=True)
-                elif post.get("image"):
+                # if post.get("video"):
+                #     print("🎥 Tentando postar vídeo...")
+                #     post_to_instagram(post["video"], caption, is_video=True)
+                if post.get("image"):
                     print("🖼️ Tentando postar imagem...")
-                    post_to_instagram(post["image"], caption, is_video=False)
+                    post_to_instagram(post["image"], caption)
                 else:
                     print("⚠️ Nenhuma mídia encontrada, pulei.")
                     continue
