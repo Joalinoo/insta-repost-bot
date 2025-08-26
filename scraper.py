@@ -104,8 +104,7 @@ def get_latest_posts():
     Retorna uma lista de posts.
     """
     sites_to_scrape = [
-        "https://www.purepeople.com.br/famosos",
-        "https://www.purepeople.com.br/noticias"
+        "https://www.purepeople.com.br/famosos"
     ]
     scraped_items = collect_news_items(sites_to_scrape)
     formatted_posts = []
